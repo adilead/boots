@@ -13,6 +13,7 @@
 
 #define BOOTS_IMPLEMENTATION //TODO rm when committing
 #define BOOTS_CMD_MAX_NUM_ARGS 100
+#define BOOTS_MAX_NUM_TARGETS 100
 
 typedef const char* cstr;
 
@@ -38,18 +39,57 @@ int boots_collect_args(cstr_array *out_args, ...);
 
 typedef struct {
     cstr name;
-    boots_path* sources;
-    int num_sources;
+    cstr_array sources;
 } boots_target;
 
 typedef struct {
     cstr name;
-    boots_target* targets;
+    boots_target targets[BOOTS_MAX_NUM_TARGETS];
     int num_targets;
 } boots_project;
 
 void boots_set_project(cstr name);
 #define PROJECT(name) boots_set_project(name);
+
+cstr boots_convert_path(int is_relative, ...);
+# define RPATH(...) boots_convert_path(true, __VA_ARGS__, (char* ) NULL)
+# define APATH(...) boots_convert_path(false, __VA_ARGS__, (char* ) NULL)
+
+cstr boots_convert_path(int is_relative, ...){
+    va_list ptr;
+    va_start(ptr, is_relative);    
+    int num_args = 0;
+    int path_len = 0;
+
+    char* arg = va_arg(ptr, char*);
+    while(arg){
+        num_args++;
+        arg = va_arg(ptr, char*);
+        if(arg) path_len += strlen(arg);
+    }
+    va_end(ptr);
+    if(num_args == 0) return NULL;
+
+    //TODO implement absolute paths
+    char *path = (char*) malloc((path_len+1+num_args-1) * sizeof(char));
+    if(path == NULL) return NULL;
+
+    va_start(ptr, is_relative);    
+    int i = 0;
+    int arg_i = 0;
+
+    arg = va_arg(ptr, char*);
+    while(arg){
+        memcpy(&path[i], arg, strlen(arg));
+        i += strlen(arg);
+        arg_i++;
+        if(arg_i < num_args) path[i++] = '/';
+        arg = va_arg(ptr, char*);
+    }
+    va_end(ptr);
+    path[i] = '\0';
+    return path;
+}
 
 int boots_project_add_target(cstr name, cstr_array *sources);
 #define ADD_TARGET(name, ...)  \
@@ -198,19 +238,39 @@ void boots_cmd(cstr prog, cstr_array *args){
     }
 }
 
-void boots_make(cstr target){
-    CMD("gcc", "examples/main.c", "-o", "examples/main")
-    //TODO build specific target
+void boots_make(cstr target_name){
+    boots_target *out_target;
+    boots_project_get_target(target_name, &out_target);
+    int num_sources = out_target->sources.size;
+    int num_args = 1 + num_sources + 1 + 1;
+    cstr* args = (cstr*) malloc((num_args+1) * sizeof(char*));
+    args[0] = "gcc";
+    memcpy(&args[1], out_target->sources.elements, num_sources*sizeof(char*));
+    args[num_sources+1] = "-o";
+    args[num_sources+2] = out_target->name;
+    args[num_sources+3] = NULL;
+    printf("INFO: Building %s\n", out_target->name);
+    cstr_array cmd_args = {.elements=args, .size=num_args};
+    boots_cmd("gcc", &cmd_args);
+    free(args);
 }
 
 int boots_project_add_target(cstr name, cstr_array *sources){
+    for(int i=0; i<sources->size; i++){
+        printf("Adding %s to %s\n", sources->elements[i], name);
+    }
+    if (project.num_targets >= BOOTS_MAX_NUM_TARGETS) {
+        return -1;
+    }
+    boots_target target = {.name=name, .sources=*sources};
+    project.targets[project.num_targets++] = target;
     return 0;
 }
 
 int boots_project_get_target(cstr target_name, boots_target **out_target){
     int idx = -1;
     for(int i = 0; i <project.num_targets; i++){
-        if(strcmp(project.targets[i].name, target_name)){
+        if(strcmp(project.targets[i].name, target_name) == 0){
             idx = i;
         }
     }
