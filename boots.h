@@ -11,7 +11,7 @@
 #include <stdarg.h>
 #include <string.h>
 
-#define BOOTS_IMPLEMENTATION //TODO rm when committing
+/* #define BOOTS_IMPLEMENTATION //TODO rm when committing */
 #define BOOTS_CMD_MAX_NUM_ARGS 100
 #define BOOTS_MAX_NUM_TARGETS 100
 
