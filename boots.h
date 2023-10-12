@@ -24,6 +24,7 @@ typedef struct {
 } cstr_array;
 
 cstr_array new_cstr_array(cstr el, ...);
+void boots_cstr_array_append(cstr_array *array, cstr_array *const addendum);
 
 typedef struct {
     cstr_array arr;
@@ -37,9 +38,16 @@ cstr boots_path_get_full_path(boots_path *pre_path);
 
 int boots_collect_args(cstr_array *out_args, ...);
 
+enum boots_target_type {
+    LIBRARY,
+    EXECUTABLE
+};
+
 typedef struct {
+    enum boots_target_type target_type;
     cstr name;
     cstr_array sources;
+    cstr_array include_dirs;
 } boots_target;
 
 typedef struct {
@@ -91,16 +99,27 @@ cstr boots_convert_path(int is_relative, ...){
     return path;
 }
 
-int boots_project_add_target(cstr name, cstr_array *sources);
-#define ADD_TARGET(name, ...)  \
+int boots_project_add_target(cstr name, bool is_lib, cstr_array *sources);
+#define ADD_TARGET(name, is_lib, ...)  \
     do {                                                                            \
         cstr_array sources;                                                           \
         int ret = boots_collect_args(&sources, __VA_ARGS__, (char*) NULL);             \
         if(ret) break;                                                              \
-        boots_project_add_target(name, &sources);                                       \
+        boots_project_add_target(name, is_lib, &sources);                                       \
     } while(0);         
 
+#define ADD_EXECUTABLE(name, ...) ADD_TARGET(name, false, __VA_ARGS__)
+#define ADD_LIBRARY(name, ...) ADD_TARGET(name, true, __VA_ARGS__)
 int boots_project_get_target(cstr target_name, boots_target **out_target);
+
+void boots_target_add_include_dir(cstr name, cstr_array *dirs);
+#define TARGET_ADD_INCLUDE_DIR(name, ...)\
+    do {\
+        cstr_array dirs;\
+        int ret = boots_collect_args(&dirs, __VA_ARGS__, (char*) NULL);      \
+        if(ret) break;                                                          \
+        boots_target_add_include_dir(name, &dirs);                       \
+    } while(0);         
 
 //IMPORTANT: Must be the last call in the build recipe
 void boots_make(cstr target);
@@ -129,6 +148,19 @@ void boots_cmd(cstr prog, cstr_array *cmd_args);
 
 
 #ifdef BOOTS_IMPLEMENTATION
+void boots_cstr_array_append(cstr_array *array, cstr_array *const addendum){
+    size_t cstr_size = sizeof(*(array->elements));
+    if(array->size == 0){
+        array->elements = (cstr*) malloc(cstr_size*addendum->size);
+        memcpy(array->elements, addendum->elements, cstr_size*addendum->size);
+        array->size = addendum->size;
+    } else {
+        array->elements = (cstr*) realloc(array->elements, cstr_size*(array->size + addendum->size));
+        memcpy(array->elements + array->size, addendum->elements, cstr_size*addendum->size);
+        array->size += addendum->size;
+    }
+}
+
 boots_project project;
 //TODO add implementation here
 
@@ -231,7 +263,7 @@ boots_path boots_create_path(cstr_array array) {
 void boots_cmd(cstr prog, cstr_array *args){
     if(fork() == 0){
         if(execvp(prog, (char * const *) args->elements)){
-            printf("some error occured");
+            printf("ERROR: some error occured executing the command %s\n", prog);
         }
     } else {
         wait(NULL);
@@ -242,27 +274,34 @@ void boots_make(cstr target_name){
     boots_target *out_target;
     boots_project_get_target(target_name, &out_target);
     int num_sources = out_target->sources.size;
-    int num_args = 1 + num_sources + 1 + 1;
+    int num_include_dirs = out_target->include_dirs.size;
+    int num_args = num_sources + (num_include_dirs+1) + 3;
     cstr* args = (cstr*) malloc((num_args+1) * sizeof(char*));
-    args[0] = "gcc";
-    memcpy(&args[1], out_target->sources.elements, num_sources*sizeof(char*));
-    args[num_sources+1] = "-o";
-    args[num_sources+2] = out_target->name;
-    args[num_sources+3] = NULL;
+    uint idx = 0;
+    args[idx++] = "gcc";
+    memcpy(&args[idx], out_target->sources.elements, num_sources*sizeof(char*));idx+=num_sources;
+    args[idx++] = "-o";
+    args[idx++] = out_target->name;
+    if(num_include_dirs > 0){
+        args[idx++] = "-I";
+        memcpy(&args[idx], out_target->include_dirs.elements, num_include_dirs*sizeof(char*));idx+=num_include_dirs;
+    }
+    args[idx] = NULL;
+
     printf("INFO: Building %s\n", out_target->name);
     cstr_array cmd_args = {.elements=args, .size=num_args};
     boots_cmd("gcc", &cmd_args);
     free(args);
 }
 
-int boots_project_add_target(cstr name, cstr_array *sources){
+int boots_project_add_target(cstr name, bool is_lib, cstr_array *sources){
     for(int i=0; i<sources->size; i++){
-        printf("Adding %s to %s\n", sources->elements[i], name);
+        printf("INFO: Adding %s to %s\n", sources->elements[i], name);
     }
     if (project.num_targets >= BOOTS_MAX_NUM_TARGETS) {
         return -1;
     }
-    boots_target target = {.name=name, .sources=*sources};
+    boots_target target = {.target_type= is_lib ? LIBRARY : EXECUTABLE, .name=name, .sources=*sources, .include_dirs={.elements=NULL, .size=0}};
     project.targets[project.num_targets++] = target;
     return 0;
 }
@@ -282,6 +321,16 @@ int boots_project_get_target(cstr target_name, boots_target **out_target){
     return 0;
 }
 
+void boots_target_add_include_dir(cstr target_name, cstr_array *dirs){
+    boots_target *out_target;
+    if(boots_project_get_target(target_name, &out_target)) return;
+    boots_cstr_array_append(&out_target->include_dirs, dirs);
+    int n = out_target->include_dirs.size;
+
+    for(int i = 0; i<n; i++){
+        printf("INFO: Adding %s to %s\n", out_target->include_dirs.elements[i], out_target->name);
+    }
+}
 
 #endif //BOOTS_IMPLEMENTATION
 #endif //BOOTS_INCLUDE
