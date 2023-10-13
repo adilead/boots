@@ -11,5 +11,5 @@
 
 Boots (Bootstrap Build System) is a build system for C which must be programmed in C and utilizes a single header file.
 This enables high compatibility because only a C compiler is required.
-Inspired by [nobuild](www.github.com/tsoding/nobuild).
+Inspired by [nobuild](https://github.com/tsoding/nobuild).
 
