@@ -11,6 +11,14 @@
 #include <stdarg.h>
 #include <string.h>
 
+#define ASCII_ART ""\
+    "                   _                 _       \n" \
+    "        ____      | |               | |      \n" \
+    "        \\  _|__   | |__   ___   ___ | |_ ___ \n" \
+    "       __)|   /   | '_ \\ / _ \\ / _ \\| __/ __|\n" \
+    "      (___|  (__  | |_) | (_) | (_) | |_\\__ \\\n" \
+    "          (_-___) |_.__/ \\___/ \\___/ \\__|___/\n"
+
 /* #define BOOTS_IMPLEMENTATION //TODO rm when committing */
 #define BOOTS_CMD_MAX_NUM_ARGS 100
 #define BOOTS_MAX_NUM_TARGETS 100
@@ -130,10 +138,7 @@ bool boots_path_exists(cstr path);
 #define EXISTS(path) boots_path_exists(path);
 
 void boots_rebuild(int argc, char **argv, cstr src_file);
-#define REBUILD_BOOTS(argc, argv)                                       \
-    do {                                                                \
-        boots_rebuild(argc, argv, __FILE__);                            \
-    } while(0)
+#define REBUILD_BOOTS(argc, argv) boots_rebuild(argc, argv, __FILE__);
 
 #define CC(...) boots_cmd("cc", __VA_ARGS__)
 
@@ -207,6 +212,9 @@ void boots_set_project(cstr name) {
 }
 
 void boots_rebuild(int argc, char **argv, cstr src_file){
+
+    cstr art = ASCII_ART;
+    printf("%s\n", art);
     if(argc < 1){
         printf("ERROR: argc < 1\n");
     }
