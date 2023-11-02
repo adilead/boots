@@ -151,6 +151,7 @@ void boots_cmd(cstr prog, cstr_array *cmd_args);
         boots_cmd(prog, &cmd_args);                                       \
     } while(0);         
 
+int boots_check_last_cmd_status();
 
 #ifdef BOOTS_IMPLEMENTATION
 void boots_cstr_array_append(cstr_array *array, cstr_array *const addendum){
@@ -167,6 +168,11 @@ void boots_cstr_array_append(cstr_array *array, cstr_array *const addendum){
 }
 
 boots_project project;
+int boots_cmd_status = 0;
+
+int boots_check_last_cmd_status(){
+    return boots_cmd_status;
+}
 //TODO add implementation here
 
 /* #define BOOTS_COLLECT_ARGS(...) collect_args(0, __VA_ARGS__) */
@@ -213,8 +219,6 @@ void boots_set_project(cstr name) {
 
 void boots_rebuild(int argc, char **argv, cstr src_file){
 
-    cstr art = ASCII_ART;
-    printf("%s\n", art);
     if(argc < 1){
         printf("ERROR: argc < 1\n");
     }
@@ -239,7 +243,11 @@ void boots_rebuild(int argc, char **argv, cstr src_file){
         printf("ERROR: Can't read file %s\n", src_file);
     }
 
-    if(last_bin_mod >= last_src_mod) return;
+    if(last_bin_mod >= last_src_mod){
+        cstr art = ASCII_ART;
+        printf("%s\n", art);
+        return;
+    } 
 
     printf("INFO: Changes in %s: Rebuilding build script\n", src_file);
     
@@ -274,7 +282,7 @@ void boots_cmd(cstr prog, cstr_array *args){
             printf("ERROR: some error occured executing the command %s\n", prog);
         }
     } else {
-        wait(NULL);
+        wait(&boots_cmd_status);
     }
 }
 
